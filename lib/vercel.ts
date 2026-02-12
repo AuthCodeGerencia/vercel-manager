@@ -1,0 +1,1 @@
+export { getVercelClient } from "./org";
