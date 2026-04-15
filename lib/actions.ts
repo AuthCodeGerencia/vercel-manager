@@ -3,6 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getVercelClient } from "./org";
+import { setMemberProjectAccess } from "./permissions";
+
+export async function setProjectAccessAction(
+  userId: string,
+  projectIds: string[] | null
+): Promise<void> {
+  await setMemberProjectAccess(userId, projectIds);
+}
 
 export async function saveVercelToken(token: string) {
   const { orgId } = await auth();
@@ -68,4 +76,155 @@ export async function getDeploymentStatusAction(deploymentId: string) {
   return {
     readyState: "readyState" in deployment ? String(deployment.readyState) : "UNKNOWN",
   };
+}
+
+export async function listEnvVarsAction(projectId: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  const result = await vercel.projects.filterProjectEnvs({ idOrName: projectId });
+
+  if ("envs" in result) return result.envs;
+  return [];
+}
+
+export async function createEnvVarAction(
+  projectId: string,
+  data: { key: string; value: string; target: string[]; type: string }
+) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  await vercel.projects.createProjectEnv({
+    idOrName: projectId,
+    upsert: "true",
+    requestBody: {
+      key: data.key,
+      value: data.value,
+      type: data.type as "plain" | "encrypted" | "sensitive" | "secret",
+      target: data.target as Array<"production" | "preview" | "development">,
+      customEnvironmentIds: [],
+    },
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function updateEnvVarAction(
+  projectId: string,
+  envId: string,
+  data: { key: string; value: string; target: string[]; type: string }
+) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  await vercel.projects.editProjectEnv({
+    idOrName: projectId,
+    id: envId,
+    requestBody: {
+      key: data.key,
+      value: data.value,
+      type: data.type as "plain" | "encrypted" | "sensitive" | "secret",
+      target: data.target as Array<"production" | "preview" | "development">,
+    },
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function deleteEnvVarAction(projectId: string, envId: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  await vercel.projects.removeProjectEnv({
+    idOrName: projectId,
+    id: envId,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function revealEnvVarAction(projectId: string, envId: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  const result = await vercel.projects.getProjectEnv({
+    idOrName: projectId,
+    id: envId,
+  });
+
+  return { value: "value" in result ? result.value : "" };
+}
+
+export async function listProjectDomainsAction(projectId: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  const result = await vercel.projects.getProjectDomains({ idOrName: projectId });
+  const domains = "domains" in result ? result.domains : [];
+
+  const configs = await Promise.all(
+    domains.map((d) =>
+      vercel.domains
+        .getDomainConfig({ domain: d.name, projectIdOrName: projectId })
+        .catch(() => null)
+    )
+  );
+
+  return domains.map((d, i) => ({
+    name: d.name,
+    apexName: d.apexName,
+    verified: d.verified,
+    redirect: d.redirect ?? null,
+    gitBranch: d.gitBranch ?? null,
+    createdAt: d.createdAt ?? null,
+    verification: d.verification ?? [],
+    config: configs[i]
+      ? {
+          configuredBy: configs[i].configuredBy,
+          misconfigured: configs[i].misconfigured,
+          recommendedIPv4: configs[i].recommendedIPv4,
+          recommendedCNAME: configs[i].recommendedCNAME,
+        }
+      : null,
+  }));
+}
+
+export async function addProjectDomainAction(projectId: string, name: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  const result = await vercel.projects.addProjectDomain({
+    idOrName: projectId,
+    requestBody: { name },
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  return {
+    name: result.name,
+    verified: result.verified,
+    verification: result.verification ?? [],
+  };
+}
+
+export async function removeProjectDomainAction(projectId: string, domain: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  await vercel.projects.removeProjectDomain({ idOrName: projectId, domain });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function verifyProjectDomainAction(projectId: string, domain: string) {
+  const vercel = await getVercelClient();
+  if (!vercel) throw new Error("No Vercel token configured");
+
+  const result = await vercel.projects.verifyProjectDomain({
+    idOrName: projectId,
+    domain,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  return { verified: result.verified };
 }

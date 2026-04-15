@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { getVercelClient } from "@/lib/org";
+import { getCurrentUserAllowedProjectIds } from "@/lib/permissions";
 import { ProjectList } from "@/components/projects/project-list";
 import { TokenSetup } from "@/components/org/token-setup";
 
@@ -27,7 +28,10 @@ export default async function ProjectsPage() {
     return <TokenSetup />;
   }
 
-  const data = await vercel.projects.getProjects({ limit: "100" });
+  const [data, allowedProjectIds] = await Promise.all([
+    vercel.projects.getProjects({ limit: "100" }),
+    getCurrentUserAllowedProjectIds(),
+  ]);
   const rawProjects = "projects" in data ? data.projects : [];
 
   const projects = rawProjects.map((p) => {
@@ -44,6 +48,11 @@ export default async function ProjectsPage() {
     };
   });
 
+  const visibleProjects =
+    allowedProjectIds === null
+      ? projects
+      : projects.filter((p) => allowedProjectIds.includes(p.id));
+
   return (
     <div className="space-y-6">
       <div>
@@ -52,7 +61,7 @@ export default async function ProjectsPage() {
           All projects in your Vercel account.
         </p>
       </div>
-      <ProjectList projects={projects} />
+      <ProjectList projects={visibleProjects} />
     </div>
   );
 }
