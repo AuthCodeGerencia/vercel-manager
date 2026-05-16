@@ -165,7 +165,7 @@ export async function createEnvVarAction(
     requestBody: {
       key: data.key,
       value: data.value,
-      type: data.type as "plain" | "encrypted" | "sensitive" | "secret",
+      type: data.type as "plain" | "encrypted" | "sensitive",
       target: data.target as Array<"production" | "preview" | "development">,
       customEnvironmentIds: [],
     },
@@ -188,7 +188,7 @@ export async function updateEnvVarAction(
     requestBody: {
       key: data.key,
       value: data.value,
-      type: data.type as "plain" | "encrypted" | "sensitive" | "secret",
+      type: data.type as "plain" | "encrypted" | "sensitive",
       target: data.target as Array<"production" | "preview" | "development">,
     },
   });
