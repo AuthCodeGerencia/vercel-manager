@@ -15,18 +15,20 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { deployLatestAction } from "@/lib/actions";
+import { triggerGitHubDeployAction } from "@/lib/actions";
 
 interface DeployButtonProps {
-  projectId: string;
   projectName: string;
-  latestDeploymentId: string;
+  githubOwner: string;
+  githubRepo: string;
+  githubBranch: string;
 }
 
 export function DeployButton({
-  projectId,
   projectName,
-  latestDeploymentId,
+  githubOwner,
+  githubRepo,
+  githubBranch,
 }: DeployButtonProps) {
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -34,19 +36,14 @@ export function DeployButton({
   function handleDeploy() {
     startTransition(async () => {
       try {
-        const result = await deployLatestAction(
-          projectId,
-          projectName,
-          latestDeploymentId
-        );
-        toast.success("Deployment triggered", {
-          description: `New deployment: ${result.id}`,
+        const result = await triggerGitHubDeployAction(githubOwner, githubRepo, githubBranch);
+        toast.success("Deploy triggered", {
+          description: `Empty commit pushed: ${result.sha.slice(0, 7)}`,
         });
         router.refresh();
       } catch (error) {
-        toast.error("Deployment failed", {
-          description:
-            error instanceof Error ? error.message : "Unknown error",
+        toast.error("Deploy failed", {
+          description: error instanceof Error ? error.message : "Unknown error",
         });
       }
     });
@@ -62,11 +59,14 @@ export function DeployButton({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Deploy Latest Commit</DialogTitle>
+          <DialogTitle>Trigger Deployment</DialogTitle>
           <DialogDescription>
-            This will create a new production deployment for{" "}
-            <span className="font-medium text-foreground">{projectName}</span>{" "}
-            using the latest commit.
+            This will push an empty commit to{" "}
+            <code className="text-xs font-medium text-foreground">
+              {githubOwner}/{githubRepo}:{githubBranch}
+            </code>{" "}
+            to trigger Vercel autodeploy for{" "}
+            <span className="font-medium text-foreground">{projectName}</span>.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -74,7 +74,7 @@ export function DeployButton({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <Button onClick={handleDeploy} disabled={isPending}>
-            {isPending ? "Deploying..." : "Deploy"}
+            {isPending ? "Pushing..." : "Deploy"}
           </Button>
         </DialogFooter>
       </DialogContent>

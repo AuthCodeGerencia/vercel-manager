@@ -5,6 +5,70 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getVercelClient } from "./org";
 import { setMemberProjectAccess } from "./permissions";
 
+async function getGithubToken(): Promise<string | null> {
+  const { orgId } = await auth();
+  if (!orgId) return null;
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  const token = org.privateMetadata?.githubToken;
+  return typeof token === "string" ? token : null;
+}
+
+export async function saveGithubTokenAction(token: string) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("No active organization");
+  const client = await clerkClient();
+  await client.organizations.updateOrganizationMetadata(orgId, {
+    privateMetadata: { githubToken: token },
+  });
+}
+
+export async function triggerGitHubDeployAction(
+  owner: string,
+  repo: string,
+  branch: string
+) {
+  const token = await getGithubToken();
+  if (!token) throw new Error("No GitHub token configured");
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "Content-Type": "application/json",
+  };
+  const base = "https://api.github.com";
+
+  const refRes = await fetch(`${base}/repos/${owner}/${repo}/git/ref/heads/${branch}`, { headers });
+  if (!refRes.ok) throw new Error(`GitHub: failed to get ref (${refRes.status})`);
+  const { object: { sha: currentSha } } = await refRes.json();
+
+  const commitRes = await fetch(`${base}/repos/${owner}/${repo}/git/commits/${currentSha}`, { headers });
+  if (!commitRes.ok) throw new Error(`GitHub: failed to get commit (${commitRes.status})`);
+  const { tree: { sha: treeSha } } = await commitRes.json();
+
+  const newCommitRes = await fetch(`${base}/repos/${owner}/${repo}/git/commits`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      message: "chore: trigger deploy [skip ci]",
+      tree: treeSha,
+      parents: [currentSha],
+    }),
+  });
+  if (!newCommitRes.ok) throw new Error(`GitHub: failed to create commit (${newCommitRes.status})`);
+  const { sha: newSha } = await newCommitRes.json();
+
+  const updateRes = await fetch(`${base}/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ sha: newSha }),
+  });
+  if (!updateRes.ok) throw new Error(`GitHub: failed to update ref (${updateRes.status})`);
+
+  return { sha: newSha };
+}
+
 export async function setProjectAccessAction(
   userId: string,
   projectIds: string[] | null

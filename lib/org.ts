@@ -18,3 +18,11 @@ export async function getVercelClient(): Promise<Vercel | null> {
   if (!token) return null;
   return new Vercel({ bearerToken: token });
 }
+
+export async function hasGithubToken(): Promise<boolean> {
+  const { orgId } = await auth();
+  if (!orgId) return false;
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  return typeof org.privateMetadata?.githubToken === "string";
+}

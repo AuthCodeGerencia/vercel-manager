@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getVercelClient } from "@/lib/org";
+import { getVercelClient, getVercelToken } from "@/lib/org";
 import { getCurrentUserAllowedProjectIds } from "@/lib/permissions";
 import { listEnvVarsAction, listProjectDomainsAction } from "@/lib/actions";
 import { DeploymentTable } from "@/components/deployments/deployment-table";
@@ -44,13 +44,22 @@ export default async function DeploymentsPage({
     redirect("/dashboard");
   }
 
-  const [deploymentsData, envVars, domains] = await Promise.all([
+  const token = await getVercelToken();
+  const [deploymentsData, projectRes, envVars, domains] = await Promise.all([
     vercel.deployments.getDeployments({ projectId, limit: tab === "deployments" ? 50 : 1 }),
+    fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((r) => r.json() as Promise<{ link?: { org?: string; repo?: string; productionBranch?: string } }>),
     tab === "env" ? listEnvVarsAction(projectId) : null,
     tab === "domains" ? listProjectDomainsAction(projectId) : null,
   ]);
 
-  const projectName = deploymentsData.deployments[0]?.name ?? projectId;
+  const latestDeployment = deploymentsData.deployments[0];
+  const projectName = latestDeployment?.name ?? projectId;
+  const link = projectRes?.link;
+  const githubOwner = link?.org ?? null;
+  const githubRepo = link?.repo ?? null;
+  const githubBranch = link?.productionBranch ?? null;
 
   return (
     <div className="space-y-6">
@@ -70,11 +79,12 @@ export default async function DeploymentsPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{projectName}</h1>
         </div>
-        {tab === "deployments" && deploymentsData.deployments[0] && (
+        {tab === "deployments" && githubOwner && githubRepo && githubBranch && (
           <DeployButton
-            projectId={projectId}
             projectName={projectName}
-            latestDeploymentId={deploymentsData.deployments[0].uid}
+            githubOwner={githubOwner}
+            githubRepo={githubRepo}
+            githubBranch={githubBranch}
           />
         )}
       </div>

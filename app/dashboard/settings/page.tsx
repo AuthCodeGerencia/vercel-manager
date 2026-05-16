@@ -1,6 +1,10 @@
 import { OrganizationProfile } from "@clerk/nextjs";
+import { hasGithubToken } from "@/lib/org";
+import { GithubTokenSetup } from "@/components/org/github-token-setup";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const githubTokenSet = await hasGithubToken();
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,6 +13,7 @@ export default function SettingsPage() {
           Manage your organization settings.
         </p>
       </div>
+      <GithubTokenSetup hasToken={githubTokenSet} />
       <OrganizationProfile
         routing="hash"
         appearance={{
