@@ -39,15 +39,17 @@ export async function triggerGitHubDeployAction(
   };
   const base = "https://api.github.com";
 
-  const refRes = await fetch(`${base}/repos/${owner}/${repo}/git/ref/heads/${branch}`, { headers });
-  if (!refRes.ok) throw new Error(`GitHub: failed to get ref (${refRes.status})`);
+  // If repo already contains "owner/repo", strip the owner prefix to avoid doubling it
+  const repoName = repo.includes("/") ? repo.split("/").slice(1).join("/") : repo;
+  const refRes = await fetch(`${base}/repos/${owner}/${repoName}/git/ref/heads/${branch}`, { headers });
+  if (!refRes.ok) throw new Error(`GitHub: failed to get ref for ${owner}/${repoName}@${branch} (${refRes.status})`);
   const { object: { sha: currentSha } } = await refRes.json();
 
-  const commitRes = await fetch(`${base}/repos/${owner}/${repo}/git/commits/${currentSha}`, { headers });
+  const commitRes = await fetch(`${base}/repos/${owner}/${repoName}/git/commits/${currentSha}`, { headers });
   if (!commitRes.ok) throw new Error(`GitHub: failed to get commit (${commitRes.status})`);
   const { tree: { sha: treeSha } } = await commitRes.json();
 
-  const newCommitRes = await fetch(`${base}/repos/${owner}/${repo}/git/commits`, {
+  const newCommitRes = await fetch(`${base}/repos/${owner}/${repoName}/git/commits`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -59,7 +61,7 @@ export async function triggerGitHubDeployAction(
   if (!newCommitRes.ok) throw new Error(`GitHub: failed to create commit (${newCommitRes.status})`);
   const { sha: newSha } = await newCommitRes.json();
 
-  const updateRes = await fetch(`${base}/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+  const updateRes = await fetch(`${base}/repos/${owner}/${repoName}/git/refs/heads/${branch}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({ sha: newSha }),
