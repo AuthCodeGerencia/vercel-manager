@@ -1,9 +1,14 @@
 import { OrganizationProfile } from "@clerk/nextjs";
 import { hasGithubToken } from "@/lib/org";
 import { GithubTokenSetup } from "@/components/org/github-token-setup";
+import { TeamTokensSetup } from "@/components/org/team-tokens-setup";
+import { getTeamTokensAction } from "@/lib/actions";
 
 export default async function SettingsPage() {
-  const githubTokenSet = await hasGithubToken();
+  const [githubTokenSet, teamTokens] = await Promise.all([
+    hasGithubToken(),
+    getTeamTokensAction(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -14,6 +19,7 @@ export default async function SettingsPage() {
         </p>
       </div>
       <GithubTokenSetup hasToken={githubTokenSet} />
+      <TeamTokensSetup teamTokens={teamTokens} />
       <OrganizationProfile
         routing="hash"
         appearance={{

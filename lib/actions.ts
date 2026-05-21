@@ -5,13 +5,71 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { getVercelClient } from "./org";
 import { setMemberProjectAccess } from "./permissions";
 
-async function getGithubToken(): Promise<string | null> {
+export type TeamTokens = Record<string, { githubToken?: string; vercelToken?: string }>;
+
+async function getGithubToken(owner?: string): Promise<string | null> {
   const { orgId } = await auth();
   if (!orgId) return null;
   const client = await clerkClient();
   const org = await client.organizations.getOrganization({ organizationId: orgId });
+
+  if (owner) {
+    const teamTokens = org.privateMetadata?.teamTokens as TeamTokens | undefined;
+    const teamToken = teamTokens?.[owner]?.githubToken;
+    if (typeof teamToken === "string") return teamToken;
+  }
+
   const token = org.privateMetadata?.githubToken;
   return typeof token === "string" ? token : null;
+}
+
+export async function getTeamTokensAction(): Promise<TeamTokens> {
+  const { orgId } = await auth();
+  if (!orgId) return {};
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  return (org.privateMetadata?.teamTokens as TeamTokens) ?? {};
+}
+
+export async function saveTeamTokenAction(
+  teamSlug: string,
+  type: "github" | "vercel",
+  token: string
+) {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("No active organization");
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  const existing = (org.privateMetadata?.teamTokens as TeamTokens) ?? {};
+  const updated: TeamTokens = {
+    ...existing,
+    [teamSlug]: {
+      ...existing[teamSlug],
+      [`${type}Token`]: token,
+    },
+  };
+  await client.organizations.updateOrganizationMetadata(orgId, {
+    privateMetadata: { teamTokens: updated },
+  });
+}
+
+export async function deleteTeamTokenAction(teamSlug: string, type: "github" | "vercel") {
+  const { orgId } = await auth();
+  if (!orgId) throw new Error("No active organization");
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  const existing = (org.privateMetadata?.teamTokens as TeamTokens) ?? {};
+  const entry = { ...existing[teamSlug] };
+  delete entry[`${type}Token` as keyof typeof entry];
+  const updated: TeamTokens = { ...existing };
+  if (Object.keys(entry).length === 0) {
+    delete updated[teamSlug];
+  } else {
+    updated[teamSlug] = entry;
+  }
+  await client.organizations.updateOrganizationMetadata(orgId, {
+    privateMetadata: { teamTokens: updated },
+  });
 }
 
 export async function saveGithubTokenAction(token: string) {
@@ -28,7 +86,7 @@ export async function triggerGitHubDeployAction(
   repo: string,
   branch: string
 ) {
-  const token = await getGithubToken();
+  const token = await getGithubToken(owner);
   if (!token) throw new Error("No GitHub token configured");
 
   const headers = {
