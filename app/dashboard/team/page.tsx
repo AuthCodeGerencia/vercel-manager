@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, clerkClient } from "@clerk/nextjs/server";
-import { getVercelClient } from "@/lib/org";
+import { getVercelClient, listProjects } from "@/lib/org";
 import { getOrgProjectAccess } from "@/lib/permissions";
 import { MemberList } from "@/components/team/member-list";
 
@@ -30,8 +30,7 @@ export default async function TeamPage() {
 
   let allProjects: { id: string; name: string }[] = [];
   if (vercel) {
-    const data = await vercel.projects.getProjects({ limit: "100" });
-    const raw = "projects" in data ? data.projects : [];
+    const raw = await listProjects(100);
     allProjects = raw.map((p) => ({ id: p.id, name: p.name }));
   }
 

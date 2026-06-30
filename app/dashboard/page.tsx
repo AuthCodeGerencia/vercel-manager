@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { getVercelClient } from "@/lib/org";
+import { getVercelClient, listProjects } from "@/lib/org";
 import { getCurrentUserAllowedProjectIds } from "@/lib/permissions";
 import { ProjectList } from "@/components/projects/project-list";
 import { TokenSetup } from "@/components/org/token-setup";
@@ -28,14 +28,13 @@ export default async function ProjectsPage() {
     return <TokenSetup />;
   }
 
-  const [data, allowedProjectIds] = await Promise.all([
-    vercel.projects.getProjects({ limit: "100" }),
+  const [rawProjects, allowedProjectIds] = await Promise.all([
+    listProjects(100),
     getCurrentUserAllowedProjectIds(),
   ]);
-  const rawProjects = "projects" in data ? data.projects : [];
 
   const projects = rawProjects.map((p) => {
-    const aliasArray = "alias" in p ? (p.alias as Array<{ domain: string; target?: string }>) : undefined;
+    const aliasArray = p.alias;
     const prodAlias = aliasArray?.find((a) => a.target === "PRODUCTION");
     const firstAlias = aliasArray?.[0];
     return {
